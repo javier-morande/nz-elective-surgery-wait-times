@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+
+# R / RStudio
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+
+# Quarto generated files
+*_files/
+.quarto/
+
+# Python
+__pycache__/
+*.pyc
+
+# Large cleaned dataset generated for Python
+waitlist_cleaned.csv

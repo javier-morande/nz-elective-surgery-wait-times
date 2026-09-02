@@ -1,0 +1,1155 @@
+---
+title: "NZ-Elective-Wait-Times"
+author: "Javier Morande"
+format: html
+editor: visual
+---
+
+# New Zealand Elective Treatment Wait Times
+
+This analysis examines elective treatment waitlist performance in New Zealand using monthly Health New Zealand data from June 2015 to September 2025. The analysis focuses on changes over time, differences between specialties and districts, extended waits beyond 120 days, and forecasts of national waitlist performance through December 2027.
+
+## Data Import and Initial Exploration
+
+```{r}
+#| message: false
+#| warning: false
+
+library(tidyverse)
+library(readxl) 
+waitlist <- read_excel(
+  "data/Waitlist-detail-extract-Q1-2025-26.xlsx",
+  sheet = "Elective Waitlist",
+  guess_max = 100000)
+glimpse(waitlist)
+
+dim(waitlist) # Shows the number of rows and columns in the dataset
+
+colSums(is.na(waitlist)) # Counts how many missing (NA) values are in each column
+
+summary(waitlist) # Gives a basic summary of every variable in the dataset
+
+unique(waitlist$Specialty) # Shows every different specialty in the dataset
+
+unique(waitlist$Ethnicity) # Shows every ethnicity category in the dataset
+
+unique(waitlist$Rurality) 
+
+```
+
+\newpage
+
+## Data quality and suppression
+
+```{r}
+sum(waitlist$`Waiting under 120 days`=="<5")# Counts rows where under-120-day patients are suppressed as <5
+sum(waitlist$`Total Waiting` == "<5") # Counts rows where total waiting patients are suppressed as <5
+mean(waitlist$`Waiting under 120 days` == "<5") * 100 # Calculates the percentage of rows suppressed as <5
+
+sum(
+  waitlist$`Waiting under 120 days` == "<5" &
+    waitlist$`Total Waiting` == "<5"
+) # Counts rows where BOTH waiting measures are suppressed as <5
+
+waitlist |> filter(`Waiting under 120 days`=="<5"& `Total Waiting`!="<5") |> 
+  group_by(`Total Waiting`) |> summarise(Number_of_Rows=n())
+
+waitlist |> distinct() |> nrow() # no duplicate rows found
+
+```
+
+### Date Coverage and Monthly Observations
+
+```{r}
+waitlist |> summarise(Earliest_date= min(`Month End Date`), Latest_date=max(`Month End Date`))
+waitlist |> distinct(`Month End Date`)
+
+monthly_rows<-waitlist |> 
+  group_by(`Month End Date`) |> summarise(number_rows=n())
+
+monthly_rows |> summarise(Min_rows=min(number_rows),Max_rows=max(number_rows))
+
+monthly_rows |>arrange(desc(number_rows))
+
+
+```
+
+### Suppression by Specialty and Ethnicity
+
+```{r}
+suppresed_by_specialty<-waitlist |> filter(`Waiting under 120 days`=="<5") |> group_by(Specialty) |> summarise(Supresed_rows=n())
+
+total_by_specialty<-waitlist |> group_by(Specialty) |> summarise(Total_rows=n())
+```
+
+```{r}
+specialty_suppression<-total_by_specialty |> left_join(suppresed_by_specialty,by ="Specialty")
+
+specialty_suppression <-specialty_suppression|> mutate(Percent_rows_under5 = Supresed_rows/Total_rows*100) |> arrange(desc(Percent_rows_under5))
+```
+
+```{r}
+supresed_by_ethnicity<-waitlist |> filter(`Waiting under 120 days`=="<5") |> group_by(Ethnicity) |> summarise(Supresed_rows=n())
+
+total_by_ethnicity<-waitlist |> group_by(Ethnicity) |> summarise(Total_ethnicity_rows=n())
+
+ethnicity_supression<-total_by_ethnicity |> left_join(supresed_by_ethnicity,by="Ethnicity")
+
+percent_ethnicity_under5 <- ethnicity_supression |> mutate(Percent_rows_under5=Supresed_rows/Total_ethnicity_rows*100)
+```
+
+### Suppression over time:
+
+```{r}
+waitlist<-waitlist |> mutate(Year= year(`Month End Date`)) # Adds a Year column to waitlist
+
+suppressed_by_year<-waitlist |> filter(`Waiting under 120 days`=="<5") |> 
+  group_by(Year) |> summarise(Suppresed_rows=n())
+
+totalYear_suppresion<-waitlist |> group_by(Year) |> summarise(Total_year_rows=n())
+
+Year_suppression<-totalYear_suppresion |> left_join(suppressed_by_year,by="Year")
+
+Percent_year_under5 <-Year_suppression |> mutate(Percent_rows_under5=Suppresed_rows/Total_year_rows*100)
+```
+
+### Data Cleaning
+
+```{r}
+waitlist<-waitlist |> mutate(Under_120_numeric=if_else(`Waiting under 120 days`=="<5",2.5, as.numeric(`Waiting under 120 days`)))
+
+waitlist |>
+  filter(
+    is.na(Under_120_numeric) &
+      !is.na(`Waiting under 120 days`)
+  ) |>
+  distinct(`Waiting under 120 days`)
+# Finds original non-missing values that failed to convert to numeric
+
+waitlist |>
+  filter(`Waiting under 120 days` == "<5") |>
+  distinct(`Waiting under 120 days`, Under_120_numeric)
+
+waitlist <- waitlist |>
+  mutate(
+    Total_waiting_numeric = if_else(
+      `Total Waiting` == "<5",
+      2.5,
+      as.numeric(`Total Waiting`)
+    )
+  ) # Creates a numeric Total Waiting column and estimates <5 as 2.5
+
+```
+
+### 
+
+```{r}
+waitlist<-waitlist |> mutate(Percent_under120= Under_120_numeric/Total_waiting_numeric*100 ) 
+
+specialty_performance<- waitlist |> group_by(Specialty) |> summarise(Total_under120=sum(Under_120_numeric), Total_waiting=sum(Total_waiting_numeric) )
+
+Total_specialty_percentage<-specialty_performance |> mutate(Specialty_performance= Total_under120/Total_waiting*100) |> arrange(Specialty_performance)
+```
+
+\newpage
+
+## Specialty Performance Against the 120-Day Threshold
+
+```{r}
+Total_specialty_percentage |> 
+  ggplot()+
+  aes(x=Specialty_performance,y=reorder(Specialty,Specialty_performance))+geom_col(fill  = "lightblue",colour = "steelblue")+geom_vline(xintercept = 95)+
+  labs(title="Elective Waitlist Performance by Specialty",
+       subtitle="Combined perfomance across June 2015 to September 2025",
+       x = "Patients waiting under 120 days (%)",
+       y = "Specialty",
+       caption = "Each bar represents the overall proportion of waiting-list counts under 120 days for that specialty across the full dataset period.")+
+  scale_x_continuous(breaks = seq(0,100,10))
+```
+
+Each bar shows the combined proportion of waiting-list counts under 120 days for each specialty from June 2015 to September 2025. Higher percentages indicate better performance. The vertical line at 95% provides a reference point for the 120-day performance target. Results are aggregated across the full period and therefore represent long-term performance rather than performance in any individual year.
+
+## Recent Specialty Performance: 2020-2024
+
+```{r}
+waitlist_5years<-waitlist |> filter(Year>=2020 & Year <=2024) |>group_by(Specialty) |> 
+  summarise(Total_under120=sum(Under_120_numeric),Total_waiting5years=sum(Total_waiting_numeric)) |> mutate(Percentage_waitlist_5years= Total_under120/Total_waiting5years*100) |> arrange(Percentage_waitlist_5years)
+  
+
+
+  waitlist_5years |> ggplot()+
+    aes(x=Percentage_waitlist_5years,y=reorder(Specialty,Percentage_waitlist_5years))+
+    geom_col(fill = "lightblue",colour = "steelblue")+scale_x_continuous(breaks = seq(0,100,10))+geom_vline(xintercept=95)+labs(
+      
+      title = "Elective Waitlist Performance by Specialty",
+      
+      subtitle = "Performance across the five complete years from 2020 to 2024",           x = "Patients waiting under 120 days (%)",
+      y = "Specialty",
+      caption = "Each bar represents the overall proportion of waiting-list counts under 120 days for that specialty across 2020–2024."
+        )
+```
+
+## Latest Specialty Performance: 2025
+
+```{r}
+waitlist_2025 <- waitlist |> 
+  filter(Year== 2025) |> group_by(Specialty) |> 
+  summarise(Total_under120=sum(Under_120_numeric),Total_waiting2025=sum(Total_waiting_numeric)) |> mutate(Total_2025percentage= Total_under120/Total_waiting2025*100) |> arrange(Total_2025percentage)
+
+waitlist_2025 <- waitlist_2025 |> 
+  mutate(
+    Performance_group = if_else(
+      row_number() <= 5,
+      "Bottom 5",
+      "Other specialties"
+    )
+  )
+
+waitlist_2025 <- waitlist_2025 |>
+  rename(`Performance Group` = Performance_group)
+
+
+# GRAPH
+waitlist_2025 |> 
+  ggplot() +
+  aes(
+    x = Total_2025percentage,
+    y = reorder(Specialty, Total_2025percentage),
+    fill = `Performance Group`
+  ) +
+  geom_col(colour = "steelblue") +
+  scale_fill_manual(
+    values = c(
+      "Bottom 5" = "blue",
+      "Other specialties" = "lightblue"
+    )
+  )+geom_vline(xintercept = 95)+
+  
+  scale_x_continuous(
+    
+    breaks = seq(0, 100, 10)
+    
+  ) +
+  
+  labs(
+    
+    title = "2025 Specialty Performance Against the 120-Day Threshold",
+    
+    subtitle = "Highlighting the five specialties furthest from the 95% target in 2025",
+    
+    x = "Patients waiting under 120 days (%)",
+    
+    y = "Specialty",
+    
+    caption = "Performance based on January to September 2025 waitlist data."
+    
+  )
+```
+
+## Change in Specialty Performance: 2020-2024 vs 2025
+
+```{r}
+
+specialty_change<-waitlist_5years |> left_join(waitlist_2025,by="Specialty")
+
+specialty_change<-specialty_change |> mutate(Change_percentage_points=Total_2025percentage-Percentage_waitlist_5years) |> arrange(Change_percentage_points)
+
+specialty_change_plot <- specialty_change |>
+  filter(!is.na(Change_percentage_points))
+```
+
+```{r}
+
+specialty_change_plot<-specialty_change_plot |> mutate(Change_group=if_else(Change_percentage_points<0,"Performance declined","Improved")) 
+
+specialty_change_plot |> 
+  ggplot() +
+  aes(
+    x = Change_percentage_points,
+    y = reorder(Specialty, Change_percentage_points),fill=Change_group
+  ) +
+  geom_col(colour = "black")+geom_vline(xintercept = 0)+scale_fill_manual(
+    
+    values = c(
+      
+      "Performance declined" = "red",
+      
+      "Improved" = "green"
+      
+    )
+    
+  )+
+labs(
+  title = " 2025 Reveals Widespread Decline in Specialty Waitlist Performance",
+  subtitle = "Comparing 2025 performance with the combined 2020–2024 baseline",
+  x = "Change in patients waiting under 120 days (percentage points)",
+  y = "Specialty",
+  fill = "Performance change")+ scale_x_continuous(
+    
+    breaks = seq(-25, 5, 5)
+    
+  )
+```
+
+Specialty waitlist performance generally declined in the available 2025 data relative to the combined 2020–2024 baseline. Most specialties recorded a negative change in the proportion of patients waiting under 120 days, while only a small number showed improvement. Renal Medicine experienced the largest decline, falling by approximately 25 percentage points. This suggests that the deterioration observed from January to September 2025 was spread across multiple specialties rather than being isolated to one area.
+
+## **Overall Waitlist Performance Trend: 2022–2025**
+
+```{r}
+
+waitlist_trend<-waitlist |> 
+  filter(Year>=2022) |> group_by(`Month End Date`) |> summarise(Total_under120=sum(Under_120_numeric),Total_waiting = sum(Total_waiting_numeric)) |> mutate(
+    
+    Percent_under120 = Total_under120 / Total_waiting * 100 )
+
+waitlist_trend |> ggplot()+
+aes(x=`Month End Date`, y=Percent_under120)+geom_line(colour = "blue")+geom_point()+
+  labs(
+    title = "Overall Elective Waitlist Performance: 2022–2025",
+    subtitle = "After a sharp decline in early 2025, performance recovered to its highest level since 2022",
+    x = "Month",
+    y = "Waiting under 120 days (%)"
+  )
+  
+```
+
+Overall elective waitlist performance fluctuated considerably between 2022 and 2025 rather than following a consistent upward or downward trend. Performance declined sharply in early 2023 before recovering through the remainder of the year, with another decline occurring in early 2024. The most pronounced recent fall occurred in early 2025, when the proportion waiting under 120 days dropped to approximately 56%. This was followed by a strong recovery, with the latest 2025 observations reaching the highest levels shown during the 2022–2025 period. This overall recovery does not necessarily contradict the specialty-level analysis, as individual specialties can perform below their 2020–2024 baseline while the combined monthly measure improves during 2025.
+
+\newpage
+
+## District Analysis
+
+### **2025 Regional Performance**
+
+```{r}
+
+regional_2025<-waitlist |> filter(Year==2025) |> group_by(Region) |>
+  summarise(
+    Total_under120=sum(Under_120_numeric),Total_waiting=sum(Total_waiting_numeric)
+  ) |> mutate(Regional_performance = Total_under120/Total_waiting*100) |> arrange(Regional_performance)
+  
+```
+
+### 2025 Elective Waitlist Performance by District
+
+```{r}
+district_2025<-waitlist |> 
+  filter(Year==2025) |> 
+  group_by(District) |>
+  summarise(Total_under120=sum(Under_120_numeric),Total_waiting=sum(Total_waiting_numeric)) |> 
+  mutate(District_performance=Total_under120/Total_waiting*100) |> 
+  arrange(District_performance)
+
+
+district_2025 |>
+  ggplot() +
+  aes(
+    x = District_performance,
+    y = reorder(District, District_performance)
+  ) +
+  geom_col(fill = "lightblue", colour = "steelblue") +
+  scale_x_continuous(
+    breaks = seq(0, 100, 10)
+  ) +
+  labs(
+    title = "2025 Elective Waitlist Performance by District",
+    subtitle = "Performance varies substantially across districts, with a gap of around 30 percentage points between the highest and lowest",
+    x = "Patients waiting under 120 days (%)",
+    y = "District",
+    caption = "Each bar shows the proportion of elective waitlist counts under 120 days for each district in the available 2025 data."
+  )
+  
+```
+
+### District Waitlist Performance Over Time: 2022-2025
+
+```{r}
+#| fig-width: 14
+#| fig-height: 10
+district_trend<-waitlist |> filter(Year >=2022) |> 
+  group_by(District,`Month End Date`) |> summarise(Total_under120=sum(Under_120_numeric), Total_waiting= sum(Total_waiting_numeric),.groups = "drop") |> 
+  mutate(District_performance= Total_under120/Total_waiting*100)
+
+district_trend<- district_trend |> group_by(District) |> 
+  arrange(`Month End Date`, by_group= TRUE) |> 
+  mutate(Overall_change=last(District_performance)- first(District_performance),
+        Change_group=if_else(Overall_change<0,"Net decline","Net improvement") ) |> arrange(Overall_change)
+
+district_trend |> ggplot()+
+  aes(x=`Month End Date`,y=District_performance,colour=Change_group)+
+  geom_line()+
+  geom_point()+
+  facet_wrap(~District,ncol=4)+scale_color_manual(values=c("Net decline"="red","Net improvement"="green"))+
+  labs(title="District Waitlist Performance Trends: 2022–2025",subtitle = "Whanganui (-25.8 pp) and Counties Manukau (-13.7 pp) recorded the largest net declines",x="Date",y="Waiting under 120 days(%)",colour="Overall change" )+theme(
+    legend.position = "bottom", axis.text.x = element_text(size = 12),axis.text.y = element_text(size=12),strip.text = element_text(size = 11),
+    
+    plot.title = element_text(size = 18),
+    
+    plot.subtitle = element_text(size = 13))
+```
+
+District-level elective waitlist perfomance varied considerably between 2022 and 2025. MidCentral recorded the largest net improvement, increasing by 26.6 percentage points, followed by Waitematā with an improvement of 21.5 percentage points. In contrast, Whanganui experienced the largest net decline, falling by 25.8 percentage points, while Counties Manukau declined by 13.7 percentage points.
+
+The results show that changes in national waitlist performance were not experienced equally across districts. Some districts improved substantially over the period while others deteriorated. These figures represent the net change between each district’s first observation in 2022 and latest available observation in 2025, rather than a continuous increase or decline throughout the entire period.
+
+**District Performance Change Summary**
+
+```{r}
+district_trend |>
+  distinct(District, Overall_change, Change_group) |>
+  arrange(Overall_change)
+
+```
+
+### 
+
+### **District Waitlist Over 120 Days: 2022–2025**
+
+```{r}
+#| fig-width: 14
+#| fig-height: 10
+
+district_over120_trend <- waitlist |>
+  filter(Year >= 2022) |>
+  group_by(District, `Month End Date`) |>
+  summarise(
+    Total_under120 = sum(Under_120_numeric),
+    Total_waiting = sum(Total_waiting_numeric),.groups = "drop"
+  ) |>
+  mutate(
+    Percent_over120 = 100 - (Total_under120 / Total_waiting * 100)
+  )
+
+district_over120_trend <- district_over120_trend |>
+  group_by(District) |>
+  arrange(`Month End Date`, .by_group = TRUE) |>
+  mutate(
+    Overall_change = last(Percent_over120) - first(Percent_over120),
+    Change_group = if_else(
+      Overall_change > 0,
+      "Net deterioration",
+      "Net improvement"
+    )
+  ) |>
+  arrange(desc(Overall_change))
+
+district_over120_trend |>
+  ggplot() +
+  aes(
+    x = `Month End Date`,
+    y = Percent_over120,
+    colour = Change_group
+  ) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~District, ncol = 4) +
+  scale_color_manual(
+    values = c(
+      "Net deterioration" = "red",
+      "Net improvement" = "green"
+    )
+  ) +
+  labs(
+    title = "District Waitlist Over 120 Days: 2022–2025",
+    subtitle = "Higher percentages indicate worse elective waitlist performance",
+    x = "Date",
+    y = "Not under 120 days (%)",
+    colour = "Overall change"
+  ) +
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12),
+    strip.text = element_text(size = 11),
+    plot.title = element_text(size = 18),
+    plot.subtitle = element_text(size = 13)
+  )
+```
+
+### Worst-Performing Specialty by District: 2025
+
+```{r}
+#|fig-width: 11
+#|fig-height: 7.5
+
+SpecialtyWaitlist_District <- waitlist |>
+  filter(Year == 2025) |>
+  group_by(District, Specialty) |>
+  summarise(
+    Total_under120 = sum(Under_120_numeric),
+    Total_waiting = sum(Total_waiting_numeric),.groups = "drop"
+  ) |>
+  mutate(
+    specialty_performance = Total_under120 / Total_waiting * 100,
+    Percent_over120 = 100 - specialty_performance
+  )
+
+worst_specialty_district <- SpecialtyWaitlist_District |>
+  group_by(District) |>
+  slice_max(Percent_over120)
+
+worst_specialty_district |>
+  ggplot() +
+  aes(
+    x = Percent_over120,
+    y = reorder(District, Percent_over120),
+    fill = Specialty
+  ) +
+  geom_col() +
+  scale_x_continuous(
+    breaks = seq(0, 100, 10)
+  ) +
+  labs(
+    title = "Worst-Performing Elective Specialty in Each District: 2025",
+    subtitle = "Auckland’s Thoracic Surgery stands out, with 96.4% of waitlist counts over 120 days",
+    x = "Waiting over 120 days (%)",
+    y = "District",
+    fill = "Specialty",
+    caption = "Based on available 2025 elective waitlist data."
+  )
+```
+
+The worst-performing specialty varies considerably across districts in 2025. Auckland stands out, with 96.4% of aggregated Thoracic Surgery waitlist counts over 120 days. However, this specialty has a relatively small total waitlist count, so the result should be interpreted cautiously. A broader pattern is evident in Orthopaedic Surgery, which is the worst-performing specialty in 9 of the 20 districts. This suggests that poor elective waitlist performance is not limited to a single district or specialty, with Orthopaedic Surgery appearing as a recurring area of pressure across New Zealand.
+
+### **Districts with the Highest Percentage of Elective Waitlist Patients Not Seen Within 120 Days: 2025**
+
+```{r}
+district_over120_2025 <- waitlist |>
+  filter(Year == 2025) |>
+  group_by(District) |>
+  summarise(
+    Totalby_district = sum(Total_waiting_numeric),
+    Under120by_district = sum(Under_120_numeric)
+  ) |>
+  mutate(
+    Over120days_district = Totalby_district - Under120by_district
+  ) |>
+  mutate(
+    Over120Percentage = Over120days_district / Totalby_district * 100
+  ) |>
+  arrange(desc(Over120Percentage))
+```
+
+```{r}
+district_over120_2025 |> ggplot()+aes(x=Over120Percentage,y=reorder(District,Over120Percentage))+geom_col(colour = "black",fill = "lightblue")+
+  labs(title="Districts with the Highest Percentage of Elective Waitlist Patients Not Seen Within 120 Days: 2025", subtitle = "Taranaki (50.1%) and Counties Manukau (48.8%) recorded the highest proportions not under 120 days",x="Over 120 Days(%)",y="Districts")
+```
+
+District-level elective waitlist performance varied considerably across New Zealand in 2025. Taranaki recorded the highest proportion of the elective waitlist over 120 days at 50.1%, followed by Counties Manukau at 48.8%. In contrast, MidCentral recorded the lowest proportion at 19.7%. This represents a difference of more than 30 percentage points between the highest and lowest-performing districts, showing substantial geographic variation in elective waitlist performance.
+
+\\newpage
+
+## Ethnicity Anaylisis
+
+### Worst-Performing Ethnicity Within Each District's Worst Specialty
+
+This analysis identifies the ethnicity with the highest proportion of waitlist counts over 120 days within the worst-performing specialty in each district during 2025.
+
+```{r}
+#| message: false
+
+ethnicityby_worst_specialty2025 <- waitlist |> 
+  filter(Year == 2025) |>
+  inner_join(worst_specialty_district, by = c("District", "Specialty")) |>
+  group_by(District, Specialty, Ethnicity) |> 
+  summarise(
+    Total_waiting = sum(Total_waiting_numeric),
+    Under_120 = sum(Under_120_numeric)
+  ) |>
+  mutate(
+    Over_120 = Total_waiting - Under_120,
+    Percentage_over120 = Over_120 / Total_waiting * 100
+  ) |>
+  arrange(desc(Percentage_over120)) |>
+  slice_max(Percentage_over120) |>
+  mutate(
+    Axis_label = if_else(
+      District == "Auckland",
+      paste(District, Specialty, Ethnicity, sep = " - "),
+      paste(District, Specialty, sep = " - ")
+    )
+  )
+
+ggplot(ethnicityby_worst_specialty2025) +
+  aes(
+    x = Percentage_over120,
+    y = reorder(Axis_label, Percentage_over120),
+    fill = Ethnicity
+  ) +
+  geom_col() +
+  labs(
+    title = "Ethnicities Affected the Most by District and Specialty",
+    subtitle = "European/Other and Pacific populations have the highest rates 
+of extended waits in Auckland",
+    x = "Percentage waiting over 120 days",
+    y = NULL
+  )
+
+```
+
+The results show substantial variation in extended elective-treatment waits across both districts and ethnic groups in 2025. Auckland Thoracic Surgery stands out, with both Pacific and European/Other patients in the analysed data recording 100% of their waiting-list counts beyond 120 days. MidCentral Vascular Surgery also shows a particularly high proportion of Māori patients waiting beyond 120 days, while Pacific patients represent the worst-performing ethnicity across many of the district-specialty combinations shown.
+
+These findings occur within a broader national problem with elective-treatment timeliness. At the end of 2024, only 59.2% of patients received elective treatment within four months, compared with the national target of 95% (Ministry of Health, 2025a). The Ministry of Health also reports that prolonged waits can worsen patients’ conditions and contribute to reduced independence and quality of life (Ministry of Health, 2025a)
+
+## Predictive Modelling: Forecasting Elective Wait Times for 2026-2027
+
+This section develops forecasting models to predict elective waitlist performance for 2026 and 2027. Historical waitlist data from June 2015 to September 2025 are used to identify temporal patterns and estimate future trends. Time-series forecasting is used for national-level projections, while machine-learning models are evaluated separately to determine whether additional predictive patterns can be identified at the district, specialty and ethnicity level.
+
+### National Waitlist Time-Series Model
+
+```{r}
+#| fig-width: 11
+
+#| fig-height: 6
+
+national_monthly<- waitlist |> group_by(`Month End Date`) |> summarise(Total_waiting=sum(Total_waiting_numeric),Under_120=sum(Under_120_numeric)) |> 
+  mutate(Over_120=Total_waiting-Under_120,Percentage_over120=Over_120/Total_waiting*100)
+
+national_monthly |> ggplot()+aes(x=`Month End Date`,y=Percentage_over120)+geom_line()+labs(title = "National Elective Waitlist Performance Over Time",x= "Year",y="Percentage waiting over 120 days")
+
+national_ts<- ts(national_monthly$Percentage_over120,
+    start=c(2015,6), frequency = 12)
+
+national_ts
+
+```
+
+### ARIMA Model
+
+```{r}
+
+library(forecast)
+
+arima_model<- auto.arima(national_ts)
+arima_model
+
+## MODEL VALIDATION
+train_ts<-window(national_ts,end=c(2024,12))
+test_ts<-window(national_ts,start=c(2025,1))
+
+test_model<- auto.arima(train_ts)
+test_model
+
+test_forecast<-forecast(test_model,h =length(test_ts))
+test_forecast
+
+accuracy(test_forecast, test_ts)
+checkresiduals(test_model)
+
+### NATIONAL FORECAST
+
+arima_forecast <- forecast(
+  arima_model,
+  h = 27,
+  level = c(80, 95)
+)
+
+arima_forecast
+
+autoplot(arima_forecast)+
+  
+  labs(
+    
+    title = "Forecast of National Elective Waitlist Performance",
+    
+    subtitle = "ARIMA forecast through December 2027",
+    
+    x = "Year",
+    
+    y = "Percentage waiting over 120 days"
+    
+  )
+```
+
+### **ARIMA Forecast Results**
+
+The ARIMA model forecasts that the percentage of elective waitlist counts waiting over 120 days will remain around the mid-30% range through 2026 and 2027. The forecast shows some monthly variation but does not predict a major improvement or deterioration over this period.
+
+To evaluate the model, it was trained using data up to the end of 2024 and tested against the first nine months of 2025. The model produced a mean absolute error of approximately 3.24 percentage points. It tracked the general level of waitlist performance during the beginning of 2025 but did not fully capture the faster improvement that occurred later in the year.
+
+The prediction intervals widen considerably further into the forecast, showing that uncertainty increases over time. Therefore, the ARIMA forecast should be interpreted as an estimate of the likely future trend rather than an exact prediction of elective waitlist performance.
+
+## Machine Learning Prediction Model
+
+A machine-learning approach was developed to investigate whether subgroup-level patterns could improve prediction of elective waitlist performance. While the ARIMA model focuses on the national trend over time, the machine-learning models used district, specialty, ethnicity, calendar information and previous waitlist performance to predict the percentage waiting over 120 days.
+
+The data were grouped by month, district, specialty and ethnicity. Historical waitlist performance from 1, 3 and 12 months earlier was then created as predictor variables. The data were divided chronologically, with 2015–2023 used for training, 2024 for validation and model comparison, and January–September 2025 reserved for final testing.
+
+```{r}
+write.csv(waitlist,"waitlist_cleaned.csv", row.names = FALSE)
+```
+
+### Random Forest
+
+A Random Forest regression model was developed to test whether these subgroup characteristics and historical waitlist patterns could predict the percentage waiting over 120 days.
+
+Several Random Forest configurations were evaluated using the 2024 validation data. The best-performing configuration used a maximum tree depth of 8 and a minimum leaf size of 50. This model achieved a validation Mean Absolute Error (MAE) of 9.26 percentage points.
+
+A simple persistence baseline was also evaluated. Rather than using a machine-learning model, the baseline assumed that each subgroup’s percentage waiting over 120 days would remain the same as in the previous month. This produced a lower validation MAE of 8.04 percentage points. Because the Random Forest produced a higher prediction error than the simpler baseline, it did not improve prediction on the unseen 2024 validation data and was therefore not selected as the preferred subgroup-level model.
+
+### **Effect of Waitlist Size on Prediction Error**
+
+Prediction accuracy was also examined across different waitlist sizes. The persistence baseline produced an MAE of 8.04 percentage points across all eligible observations, but the error decreased as smaller waitlist groups were excluded. For groups with at least 20 people waiting, the MAE decreased to 4.66 percentage points, and for groups with at least 100 people waiting, it decreased further to 3.56 percentage points.
+
+This suggests that smaller district, specialty and ethnicity groups experience considerably greater month-to-month variation and are therefore more difficult to predict. These smaller groups were retained in the analysis because they remain part of the reported waitlist data.
+
+### **Gradient Boosting Model**
+
+A Gradient Boosting regression model was also tested using the same predictor variables and chronological validation approach as the Random Forest model. The model achieved a 2024 validation Mean Absolute Error (MAE) of 9.31 percentage points.
+
+This was slightly higher than the Random Forest MAE of 9.26 percentage points and also higher than the simple persistence baseline MAE of 8.04 percentage points
+
+Because Gradient Boosting did not improve predictive performance on unseen validation data, it was not selected as the preferred subgroup-level model.
+
+These results further suggest that more complex machine-learning approaches did not outperform the simpler previous-month persistence baseline for subgroup-level waitlist prediction.
+
+### Forecasting the National Total Waitlist
+
+```{r}
+# ============================================================
+
+# FORECAST NATIONAL TOTAL WAITLIST
+
+# ============================================================
+
+# Creates a monthly time series for the total number
+
+# of people on the national elective waitlist
+
+total_waiting_ts <- ts(
+  
+  national_monthly$Total_waiting,
+  
+  start = c(2015, 6),
+  
+  frequency = 12
+  
+)
+
+# Displays the time series
+
+total_waiting_ts
+
+# ============================================================
+# VALIDATE TOTAL WAITLIST FORECAST
+# ============================================================
+
+# Training data: June 2015 to December 2024
+total_train_ts <- window(
+  total_waiting_ts,
+  end = c(2024, 12)
+)
+
+# Test data: January to September 2025
+total_test_ts <- window(
+  total_waiting_ts,
+  start = c(2025, 1)
+)
+
+# Let ARIMA choose the best model using training data only
+total_test_model <- auto.arima(
+  total_train_ts
+)
+
+# See which ARIMA model was selected
+total_test_model
+
+# Forecast the same 9 months that we actually have for 2025
+total_test_forecast <- forecast(
+  total_test_model,
+  h = length(total_test_ts)
+)
+
+# Compare forecast against actual 2025 numbers
+accuracy(
+  total_test_forecast,
+  total_test_ts
+)
+
+# ============================================================
+# HOLT DAMPED TREND - TOTAL WAITLIST
+# ============================================================
+
+# Fits a damped trend model using data through December 2024
+holt_total_model <- holt(
+  total_train_ts,
+  h = length(total_test_ts),
+  damped = TRUE
+)
+
+# Shows the model
+holt_total_model
+
+# Tests predictions against the actual Jan-Sep 2025 values
+accuracy(
+  holt_total_model,
+  total_test_ts
+)
+```
+
+## 
+
+```{r}
+# ============================================================
+# RECENT-WINDOW ARIMA TEST: 2022-2024
+# ============================================================
+
+# Uses only the more recent 2022-2024 period for training
+recent_total_train <- window(
+  total_waiting_ts,
+  start = c(2022, 1),
+  end = c(2024, 12)
+)
+
+# Automatically selects the best ARIMA model
+recent_total_model <- auto.arima(
+  recent_total_train
+)
+
+# Shows which ARIMA model was selected
+recent_total_model
+
+# Forecasts Jan-Sep 2025
+recent_total_forecast <- forecast(
+  recent_total_model,
+  h = length(total_test_ts)
+)
+# Checks how well the recent-window model predicted 2025
+accuracy(
+  recent_total_forecast,
+  total_test_ts
+)
+```
+
+### Forecasting the National Total Waitlist
+
+To assess whether the total-waitlist forecasting approach was reliable across more than one period, a rolling backtest was performed. Separate models were trained using only data available before each test year, then evaluated against the data from that test year.
+
+Backtests were carried out for 2022, 2023, 2024 and the available January–September 2025 period. This provides a more robust assessment than relying on a single holdout year and helps identify whether forecasting accuracy is consistent over time.
+
+```{r}
+# ============================================================
+# ROLLING BACKTEST - NATIONAL TOTAL WAITLIST
+# ============================================================
+
+
+backtest_years <- c(2022, 2023, 2024, 2025)
+backtest_results <- data.frame()
+for (year in backtest_years) {
+  
+  # Uses all data before the test year
+  train_end_year <- year - 1
+  train_data <- window(
+    total_waiting_ts,
+    end = c(train_end_year, 12)
+    
+  )
+  # 2025 only has data up to September
+  
+  test_end_month <- ifelse(
+    year == 2025,
+    
+    9,
+    12
+  )
+  test_data <- window(
+    total_waiting_ts,
+    start = c(year, 1),
+    end = c(year, test_end_month)
+  )
+  
+  # Fits ARIMA using only the training data
+  model <- auto.arima(
+    train_data
+  )
+  # Forecasts the test period
+  predictions <- forecast(
+    model,
+    h = length(test_data)
+  )
+  # Calculates forecast accuracy
+  results <- accuracy(
+    predictions,
+    test_data
+  )
+  # Saves the test result
+  backtest_results <- rbind(
+    backtest_results,
+    data.frame(
+      Year = year,
+      MAE = results["Test set", "MAE"],
+      RMSE = results["Test set", "RMSE"],
+     MAPE = results["Test set", "MAPE"]
+    )
+  )
+}
+# Shows all backtest results
+
+backtest_results
+
+# ============================================================
+# FINAL TOTAL WAITLIST MODEL
+# ============================================================
+
+# Fits ARIMA using all available data through September 2025
+final_total_model <- auto.arima(
+  total_waiting_ts
+)
+
+# Shows the selected model
+final_total_model
+```
+
+### Final National Forecast: 2026-2027
+
+After evaluating the total-waitlist forecasting approach, the selected model was fitted using the available historical data through September 2025. The model was then used to forecast the total national elective waitlist for the 27 months from October 2025 to December 2027.
+
+```{r}
+#==============================================================
+# FORECAST TOTAL WAITLIST THROUGH DECEMBER 2027
+#===============================================================
+# 27 months: October 2025 to december 2027
+
+final_total_forecast<-forecast(
+  final_total_model,
+  h=27,
+  level=c(80,95)
+  
+)
+final_total_forecast
+
+
+
+```
+
+The total-waitlist forecast was then combined with the ARIMA forecast of the percentage waiting over 120 days. This allows the analysis to estimate not only the future size of the waitlist, but also the approximate number of people expected to be waiting longer than 120 days.
+
+```{r}
+# ============================================================
+# COMBINE FINAL FORECASTS
+# ============================================================
+
+# Creates monthly dates from October 2025 to December 2027
+forecast_dates <- seq(
+  as.Date("2025-10-01"),
+  as.Date("2027-12-01"),
+  by = "month"
+)
+# Combines both national forecasts
+final_forecast <- data.frame(
+  Date = forecast_dates,
+  # Forecast total number of people on the waitlist
+  Predicted_total_waiting =
+    as.numeric(final_total_forecast$mean),
+  
+  # Forecast percentage waiting longer than 120 days
+  Predicted_percent_over120 =
+    as.numeric(arima_forecast$mean)
+)
+# Calculates estimated number of people waiting over 120 days
+final_forecast <- final_forecast |>
+  mutate(
+    Predicted_people_over120 =
+      Predicted_total_waiting *
+      Predicted_percent_over120 / 100,
+    # Round results for readability
+    Predicted_total_waiting =
+      round(Predicted_total_waiting),
+ 
+    Predicted_percent_over120 =
+      round(Predicted_percent_over120, 1),
+    
+    Predicted_people_over120 =
+      round(Predicted_people_over120)
+  )
+
+# Show complete final forecast
+print(final_forecast)
+
+```
+
+## National Elective Waitlist Forecast: 2025-2027
+
+### Forecast Percentage Waiting Over 120 Days
+
+```{r}
+# ============================================================
+# FORECAST % WAITING OVER 120 DAYS WITH 95% INTERVAL
+# ============================================================
+
+# Historical national percentage
+historical_percent <- national_monthly |>
+  transmute(
+    Date = `Month End Date`,
+    Percentage = Percentage_over120,
+    Type = "Historical"
+  )
+
+# Forecast national percentage with 95% interval
+forecast_percent <- data.frame(
+  Date = forecast_dates,
+  Percentage = as.numeric(arima_forecast$mean),
+  Lower_95 = as.numeric(arima_forecast$lower[, "95%"]),
+  Upper_95 = as.numeric(arima_forecast$upper[, "95%"]),
+  Type = "Forecast"
+)
+
+# Plot
+ggplot() +
+  
+  # 95% forecast uncertainty
+  geom_ribbon(
+    data = forecast_percent,
+    aes(
+      x = Date,
+      ymin = Lower_95,
+      ymax = Upper_95
+    ),
+    alpha = 0.2
+  ) +
+  
+  # Historical line
+  geom_line(
+    data = historical_percent,
+    aes(
+      x = Date,
+      y = Percentage,
+      colour = Type
+    ),
+    linewidth = 1
+  ) +
+  
+  # Forecast line
+  geom_line(
+    data = forecast_percent,
+    aes(
+      x = Date,
+      y = Percentage,
+      colour = Type
+    ),
+    linewidth = 1
+  ) +
+  
+  # Health NZ target
+  geom_hline(
+    yintercept = 5,
+    linetype = "dashed"
+  ) +
+  
+  labs(
+    title = "National Percentage Waiting Over 120 Days",
+    subtitle = "Historical data to September 2025 and forecast to December 2027",
+    x = NULL,
+    y = "Waiting over 120 days (%)",
+    colour = NULL
+  ) +
+  # Show every year on the x-axis
+  scale_x_date(
+      date_breaks = "1 year",
+       date_labels = "%Y",
+    limits = as.Date(c("2015-01-01", "2027-12-01")),
+    expand = c(0, 0)
+  ) + 
+  theme_minimal()
+```
+
+The forecast indicates that New Zealand is not expected to meet the elective treatment wait-time target by the end of 2027. The Government’s target is for 95% of patients to receive elective treatment within four months, which is equivalent to approximately 5% waiting longer than four months.
+
+However, the model forecasts that 35.5% of patients will still be waiting over 120 days in December 2026 and 34.6% in December 2027. Although this represents a small improvement, the forecast remains far above the level required to meet the target.
+
+The widening 95% prediction interval shows that uncertainty increases further into the future, so these figures should be treated as estimates rather than exact outcomes. The Government’s target is intended to be achieved by 2030, so this analysis does not determine whether the 2030 target will ultimately be reached; it shows that the target is not forecast to be reached by the end of 2027.
+
+### Forecast Total Elective Waitlist
+
+```{r}
+# ============================================================
+# FORECAST TOTAL ELECTIVE WAITLIST
+# ============================================================
+
+# Historical national total waitlist
+historical_total <- national_monthly |>
+  transmute(
+    Date = `Month End Date`,
+    Total_waiting = Total_waiting,
+    Type = "Historical"
+  )
+
+# Forecast total waitlist with 95% interval
+forecast_total <- data.frame(
+  Date = forecast_dates,
+  Total_waiting = as.numeric(final_total_forecast$mean),
+  Lower_95 = as.numeric(final_total_forecast$lower[, "95%"]),
+  Upper_95 = as.numeric(final_total_forecast$upper[, "95%"]),
+  Type = "Forecast"
+)
+
+# Plot historical and forecast total waitlist
+ggplot() +
+  
+  # 95% forecast interval
+  geom_ribbon(
+    data = forecast_total,
+    aes(
+      x = Date,
+      ymin = Lower_95,
+      ymax = Upper_95
+    ),
+    alpha = 0.2
+  ) +
+  
+  # Historical total waitlist
+  geom_line(
+    data = historical_total,
+    aes(
+      x = Date,
+      y = Total_waiting,
+      colour = Type
+    ),
+    linewidth = 1
+  ) +
+  
+  # Forecast total waitlist
+  geom_line(
+    data = forecast_total,
+    aes(
+      x = Date,
+      y = Total_waiting,
+      colour = Type
+    ),
+    linewidth = 1
+  ) +
+  
+  # Show every year and stop at 2027
+  scale_x_date(
+    date_breaks = "1 year",
+    date_labels = "%Y",
+    limits = as.Date(c("2015-01-01", "2027-12-01")),
+    expand = c(0, 0)
+  ) +
+  
+  labs(
+    title = "National Elective Waitlist",
+    subtitle = "Historical data to September 2025 and forecast to December 2027",
+    x = NULL,
+    y = "Total people waiting",
+    colour = NULL
+  ) +
+  
+  theme_minimal()
+```
+
+The national elective waitlist is forecast to increase over the next two years. From approximately 78,000 people in September 2025, the model predicts the waitlist will rise to about 84,000 by December 2026 and 86,200 by December 2027. The widening 95% prediction interval shows that uncertainty increases further into the forecast period, but the central forecast still indicates continued growth in the total number of people waiting for elective treatment.
+
+## **Conclusion**
+
+This analysis found substantial variation in elective waitlist performance across specialties, districts and ethnic groups, with several areas experiencing high proportions of people waiting longer than 120 days.
+
+Forecasting results suggest that the national percentage waiting over 120 days is likely to remain around the mid-30% range through 2026 and 2027, while the total elective waitlist is expected to continue increasing. This means that although the proportion waiting over 120 days may improve slightly, the overall number of people waiting for elective treatment is still expected to remain high.
+
+The results also show that forecasting uncertainty increases further into the future. Therefore, the projections should be interpreted as estimates of likely trends rather than exact outcomes. Overall, the analysis suggests that substantial improvement would still be required for elective wait-time performance to approach the national target.
+
+## **Use of Artificial Intelligence**
+
+Artificial intelligence tools were used as a learning and development aid during this project, particularly for the machine-learning and forecasting components, which extend beyond the material covered in my first year of study. AI assistance was used to help explain unfamiliar modelling concepts, support the development and debugging of R and Python code, and assist with interpreting model evaluation methods.
+
+The analysis, selection of the research questions, data preparation, model testing and interpretation of the results were carried out as part of my own learning process. AI-generated suggestions were reviewed and tested against the data rather than being accepted without evaluation.
