@@ -1,8 +1,13 @@
 ---
-title: "NZ-Elective-Wait-Times"
+title: "NZ Elective Wait Times"
+
 author: "Javier Morande"
-format: html
-editor: visual
+
+format:
+
+  html:
+
+    embed-resources: true
 ---
 
 # New Zealand Elective Treatment Wait Times
@@ -54,7 +59,8 @@ sum(
 waitlist |> filter(`Waiting under 120 days`=="<5"& `Total Waiting`!="<5") |> 
   group_by(`Total Waiting`) |> summarise(Number_of_Rows=n())
 
-waitlist |> distinct() |> nrow() # no duplicate rows found
+waitlist |> distinct() |> nrow() 
+# no duplicate rows found
 
 ```
 

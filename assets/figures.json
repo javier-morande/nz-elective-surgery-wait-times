@@ -1,0 +1,114 @@
+[
+  {
+    "path": "elective_wait_times_files/figure-html/unnamed-chunk-10-1.png",
+    "section": "specialty-performance-against-the-120-day-threshold",
+    "width": 1344,
+    "height": 960,
+    "sha256": "eb501cce68c88c534e8b6f15d6cc76cb51678f6cb3a1b29368d42434a3dd67dc"
+  },
+  {
+    "path": "elective_wait_times_files/figure-html/unnamed-chunk-11-1.png",
+    "section": "recent-specialty-performance-2020-2024",
+    "width": 1344,
+    "height": 960,
+    "sha256": "964aa9ec1813b702e681223c10f21acbb342be2957832af1b39b2c31ba7e2a17"
+  },
+  {
+    "path": "elective_wait_times_files/figure-html/unnamed-chunk-12-1.png",
+    "section": "latest-specialty-performance-2025",
+    "width": 1344,
+    "height": 960,
+    "sha256": "8757f4bd7409b6097ec58e5500fe6d91c8c2f2586099ebdf18b5d3d570eefede"
+  },
+  {
+    "path": "elective_wait_times_files/figure-html/unnamed-chunk-14-1.png",
+    "section": "change-in-specialty-performance-2020-2024-vs-2025",
+    "width": 1344,
+    "height": 960,
+    "sha256": "2a569e06f990e459d36d8aa2d8f421f50a04a212c79d7c58306c2f46c6fa6e18"
+  },
+  {
+    "path": "elective_wait_times_files/figure-html/unnamed-chunk-15-1.png",
+    "section": "overall-waitlist-performance-trend-20222025",
+    "width": 1344,
+    "height": 960,
+    "sha256": "acf06ef7803f13098edcc78172e1569bc7f192fd8795f7669b9980a7245e3361"
+  },
+  {
+    "path": "elective_wait_times_files/figure-html/unnamed-chunk-17-1.png",
+    "section": "elective-waitlist-performance-by-district",
+    "width": 1344,
+    "height": 960,
+    "sha256": "356d877abe5e691068917b78dcc7782fa1ad07b766758f3e14153ba59be2dfa1"
+  },
+  {
+    "path": "elective_wait_times_files/figure-html/unnamed-chunk-18-1.png",
+    "section": "district-waitlist-performance-over-time-2022-2025",
+    "width": 2688,
+    "height": 1920,
+    "sha256": "0b47accefa7c5d1ffabe0e9c6189ad9a549b191838cb2a3bc0f5b44935c1495f"
+  },
+  {
+    "path": "elective_wait_times_files/figure-html/unnamed-chunk-20-1.png",
+    "section": "district-waitlist-over-120-days-20222025",
+    "width": 2688,
+    "height": 1920,
+    "sha256": "197f32267868cfc4777b0485d5ace19b532daab7672b7cf5d139b77d56697c69"
+  },
+  {
+    "path": "elective_wait_times_files/figure-html/unnamed-chunk-21-1.png",
+    "section": "worst-performing-specialty-by-district-2025",
+    "width": 1344,
+    "height": 960,
+    "sha256": "43912902de6bd5e8d75bb5de03517ff24aa7c5db1d5f1954c3616d30490cb0b4"
+  },
+  {
+    "path": "elective_wait_times_files/figure-html/unnamed-chunk-23-1.png",
+    "section": "districts-with-the-highest-percentage-of-elective-waitlist-patients-not-seen-within-120-days-2025",
+    "width": 1344,
+    "height": 960,
+    "sha256": "9978306fa2d3ffc8a555d2738ea2bcb2d46375f73e59b6bbf3b01634a96d7213"
+  },
+  {
+    "path": "elective_wait_times_files/figure-html/unnamed-chunk-24-1.png",
+    "section": "worst-performing-ethnicity-within-each-districts-worst-specialty",
+    "width": 1344,
+    "height": 960,
+    "sha256": "7a9609c4e0e7fb04818d23967fa8101915e6b67e59089dc1d8d4d3f881cc69ac"
+  },
+  {
+    "path": "elective_wait_times_files/figure-html/unnamed-chunk-25-1.png",
+    "section": "national-waitlist-time-series-model",
+    "width": 2112,
+    "height": 960,
+    "sha256": "89be48082e675cdcf46b7425b074f65606ad6a698930f99691382ebba2a7e218"
+  },
+  {
+    "path": "elective_wait_times_files/figure-html/unnamed-chunk-26-1.png",
+    "section": "arima-model",
+    "width": 1344,
+    "height": 960,
+    "sha256": "88627d41fec3f0509da9a8f30a669bac00283e1294afcc56994c018563a865c1"
+  },
+  {
+    "path": "elective_wait_times_files/figure-html/unnamed-chunk-26-2.png",
+    "section": "arima-model",
+    "width": 1344,
+    "height": 960,
+    "sha256": "b0c599316d03214772fe7c117ccd88ff07d51aad62e004da87394f9106a084d4"
+  },
+  {
+    "path": "elective_wait_times_files/figure-html/unnamed-chunk-33-1.png",
+    "section": "forecast-percentage-waiting-over-120-days",
+    "width": 1344,
+    "height": 960,
+    "sha256": "deed5a3da1a6f2a4efde47a1db7e48e7253f673eccd291519a07965a98479797"
+  },
+  {
+    "path": "elective_wait_times_files/figure-html/unnamed-chunk-34-1.png",
+    "section": "forecast-total-elective-waitlist",
+    "width": 1344,
+    "height": 960,
+    "sha256": "86f8074727c8d3e1634973be57efe7db5b2d5e4fd5e32f491438abc150feefe2"
+  }
+]

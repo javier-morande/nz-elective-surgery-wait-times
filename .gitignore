@@ -7,8 +7,7 @@
 .Ruserdata
 .Rproj.user/
 
-# Quarto generated files
-*_files/
+# Quarto cache only; published figures and supporting assets must be tracked.
 .quarto/
 
 # Python
